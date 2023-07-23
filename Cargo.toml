@@ -1,5 +1,7 @@
 [package]
 name = "raw-image"
+description = "A Rust create for extracting data like thumbnails out of RAW photo files."
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
 
