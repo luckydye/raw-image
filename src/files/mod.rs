@@ -1,16 +1,16 @@
-pub trait RawImage {
+pub trait ThumbnailImage {
 	fn new(file: File) -> Self;
 
 	fn get_thumbnail(&self) -> RawResult<image::DynamicImage>;
 }
 
-mod any;
 mod cr2;
 mod cr3;
+mod tiff;
 
 use std::{fs, fs::File, path::Path};
 
-use image::{DynamicImage, GenericImageView};
+use image::DynamicImage;
 use thiserror::Error;
 
 /// The maximum file size that an image can be in order to have a thumbnail generated.
@@ -50,7 +50,7 @@ pub fn raw_to_dynamic_image(path: &Path) -> RawResult<DynamicImage> {
 
 		match ext.to_ascii_lowercase().to_str() {
 			Some("cr3") => cr3::Cr3::new(file).get_thumbnail().unwrap(),
-			// Some("cr2") => any::Any::new(file).get_thumbnail_array(1).unwrap(),
+			Some("cr2") => cr2::Cr2::new(file).get_thumbnail().unwrap(),
 			// Some("arw") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
 			// Some("nef") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
 			// Some("rw2") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
