@@ -1,19 +1,16 @@
 pub trait RawImage {
-    fn new(buffer: Vec<u8>) -> Self;
+	fn new(file: File) -> Self;
 
-    fn get_thumbnail(&self) -> RawResult<image::DynamicImage>;
+	fn get_thumbnail(&self) -> RawResult<image::DynamicImage>;
 }
 
+mod any;
+mod cr2;
 mod cr3;
 
-use std::{
-	fs,
-	fs::File,
-	io::{Read, BufReader},
-	path::Path,
-};
+use std::{fs, fs::File, path::Path};
 
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView};
 use thiserror::Error;
 
 /// The maximum file size that an image can be in order to have a thumbnail generated.
@@ -47,24 +44,18 @@ pub fn raw_to_dynamic_image(path: &Path) -> RawResult<DynamicImage> {
 	}
 
 	let img: DynamicImage = {
-		let p = path.to_str().ok_or(RawError::InvalidPath)?;
-		let f = File::open(p)?;
 		let ext = path.extension().ok_or(RawError::OK)?;
-    let mut reader = BufReader::new(f);
-    let mut buffer = Vec::new();
-
-		reader.read_to_end(&mut buffer)?;
+		let p = path.to_str().ok_or(RawError::InvalidPath)?;
+		let file = File::open(p)?;
 
 		match ext.to_ascii_lowercase().to_str() {
-			Some("cr3") => cr3::Cr3::new(buffer).get_thumbnail().unwrap(),
-			// Some("tiff") => tiff::Tiff::new(buffer).get_thumbnail(),
-			// Some("cr2") => cr2::Cr2::new(buffer).get_thumbnail(),
-			// Some("dng") => dng::Dng::new(buffer).get_thumbnail(),
-			// Some("arw") => arw::Arw::new(buffer).get_thumbnail(),
-			// Some("nef") => nef::Nef::new(buffer).get_thumbnail(),
-			_ => {
-				return Err(RawError::Unsupported)
-			},
+			Some("cr3") => cr3::Cr3::new(file).get_thumbnail().unwrap(),
+			// Some("cr2") => any::Any::new(file).get_thumbnail_array(1).unwrap(),
+			// Some("arw") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
+			// Some("nef") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
+			// Some("rw2") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
+			// Some("dng") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
+			_ => return Err(RawError::Unsupported),
 		}
 	};
 

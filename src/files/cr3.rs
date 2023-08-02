@@ -1,6 +1,10 @@
 use super::{RawImage, RawResult, RawError};
 
-use std::io::Cursor;
+use std::{
+	fs::File,
+	io::{Read, BufReader, Cursor},
+};
+
 use image::io::Reader as ImageReader;
 
 //
@@ -11,37 +15,29 @@ pub struct Cr3 {
   buffer: Vec<u8>,
 }
 
+struct Cr3Box {
+  size: usize,
+  box_type: String,
+}
+
 const UUID_PRVW: &str = "eaf42b5e1c984b88b9fbb7dc406e4d16";
+const UUID_MOOV: &str = "85c0b68782f11e08111f4ce462b6a48";
 
-impl Cr3 {}
-
-impl RawImage for Cr3 {
-  fn new(buffer: Vec<u8>) -> Cr3 {
-    Cr3 { buffer: buffer }
-  }
-
-  fn get_thumbnail(&self) -> RawResult<image::DynamicImage> {
+impl Cr3 {
+  fn parse_box(&self, offset: usize) -> Cr3Box {
     let buffer = &self.buffer;
 
-    let mut offset: usize = 0;
-
     let file_type_box_size = u32::from_be_bytes(buffer[offset..offset+4].try_into().unwrap());
-    // let box_type = std::str::from_utf8(buffer[offset+4..offset+8].try_into().unwrap());
+    let box_type = std::str::from_utf8(buffer[offset+4..offset+8].try_into().unwrap());
 
-    offset = offset + usize::try_from(file_type_box_size).unwrap();
+    Cr3Box {
+      size: usize::try_from(file_type_box_size).unwrap(),
+      box_type: String::from(box_type.unwrap()),
+    }
+  }
 
-    let moov_box_size = u32::from_be_bytes(buffer[offset..offset+4].try_into().unwrap());
-
-    offset = offset + usize::try_from(moov_box_size).unwrap();
-
-    let xpacket_box_size = u32::from_be_bytes(buffer[offset..offset+4].try_into().unwrap());
-
-    offset = offset + usize::try_from(xpacket_box_size).unwrap();
-
-    // let preview_box_size = u32::from_be_bytes(buffer[offset..offset+4].try_into().unwrap());
-    // let preview_type = std::str::from_utf8(buffer[offset+4..offset+8].try_into().unwrap());
-
-    offset += 8;
+  fn prase_box_uuid(&self, offset: usize) -> String {
+    let buffer = &self.buffer;
 
     let mut uuid = String::new();
     let mut uuid_offset = offset;
@@ -50,26 +46,64 @@ impl RawImage for Cr3 {
       uuid_offset += 1;
       uuid += &String::from(hex);
     }
-    offset += 16;
+    // offset += 16;
 
-    if uuid == UUID_PRVW {
-      offset += 11 + 1 + 4 + 2 + 2 + 2;
+    return uuid;
+  }
 
-      let width = u16::from_be_bytes(buffer[offset..offset+2].try_into().unwrap());
-      let height = u16::from_be_bytes(buffer[offset+2..offset+4].try_into().unwrap());
-      offset += 4;
-      offset += 2;
+  fn parse_box_preview(&self, offset: usize) -> RawResult<image::DynamicImage> {
+    let buffer = &self.buffer;
 
-      let byte_size = u32::from_be_bytes(buffer[offset..offset+4].try_into().unwrap());
-      offset += 4;
+    let mut offset = offset + 11 + 1 + 4 + 2 + 2 + 2;
 
-      let image_data = &buffer[offset..offset+usize::try_from(byte_size).unwrap()];
+    // let width = u16::from_be_bytes(buffer[offset..offset+2].try_into().unwrap());
+    // let height = u16::from_be_bytes(buffer[offset+2..offset+4].try_into().unwrap());
+    offset += 4;
+    offset += 2;
 
-      let jpeg_img = ImageReader::new(Cursor::new(image_data)).with_guessed_format()?.decode()?;
+    let byte_size = u32::from_be_bytes(buffer[offset..offset+4].try_into().unwrap());
+    offset += 4;
 
-      println!("<Thumbnail> width: {:?} height: {:?} size: {:?}", width, height, byte_size);
+    let image_data = &buffer[offset..offset+usize::try_from(byte_size).unwrap()];
 
-      return Ok(jpeg_img.rotate270());
+    let img = ImageReader::new(Cursor::new(image_data)).with_guessed_format()?.decode()?;
+
+    Ok(img)
+  }
+}
+
+impl RawImage for Cr3 {
+  fn new(file: File) -> Cr3 {
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+		reader.read_to_end(&mut buffer).unwrap();
+
+    Cr3 { buffer: buffer }
+  }
+
+  fn get_thumbnail(&self) -> RawResult<image::DynamicImage> {
+    let mut offset: usize = 0;
+
+    for _ in 0..4 {
+      let mut index = offset;
+      let cr3_box = self.parse_box(index);
+      index += 8;
+
+      if cr3_box.box_type == "uuid" {
+        let uuid = self.prase_box_uuid(index);
+        index += 16;
+
+        if uuid == UUID_MOOV {
+          // skip
+        }
+
+        if uuid == UUID_PRVW {
+          return Ok(self.parse_box_preview(index)?);
+        }
+      }
+
+      offset += cr3_box.size;
     }
 
     Err(RawError::ExtractThumbnail)
