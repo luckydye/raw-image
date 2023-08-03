@@ -1,11 +1,9 @@
-use super::tiff::{self};
-use super::{RawError, RawResult, ThumbnailImage};
+use super::tiff;
+use super::ThumbnailImage;
 
-use image::io::Reader as ImageReader;
-use image::DynamicImage;
+use image::{io::Reader as ImageReader, DynamicImage, ImageError};
 use std::fs::File;
-use std::io::Cursor;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Cursor, Read};
 
 pub struct Cr2 {
 	buffer: Vec<u8>,
@@ -29,7 +27,7 @@ impl ThumbnailImage for Cr2 {
 		Cr2 { buffer }
 	}
 
-	fn get_thumbnail(&self) -> RawResult<DynamicImage> {
+	fn get_thumbnail(&self) -> Result<Option<DynamicImage>, ImageError> {
 		let header = self.parse_header();
 		let mut offset = header.ifd_offset as usize;
 
@@ -43,9 +41,11 @@ impl ThumbnailImage for Cr2 {
 					let strip = &strips[0];
 					let image_data = &self.buffer[strip.offset..strip.offset + strip.length];
 
-					return Ok(ImageReader::new(Cursor::new(image_data))
-						.with_guessed_format()?
-						.decode()?);
+					return Ok(Some(
+						ImageReader::new(Cursor::new(image_data))
+							.with_guessed_format()?
+							.decode()?,
+					));
 				}
 			}
 
@@ -53,6 +53,6 @@ impl ThumbnailImage for Cr2 {
 			ifd_index += 1;
 		}
 
-		Err(RawError::ExtractThumbnail)
+		Ok(None)
 	}
 }

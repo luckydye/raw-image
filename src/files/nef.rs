@@ -1,11 +1,9 @@
 use super::tiff::{self, Tags};
-use super::{RawError, RawResult, ThumbnailImage};
+use super::ThumbnailImage;
 
-use image::io::Reader as ImageReader;
-use image::DynamicImage;
+use image::{io::Reader as ImageReader, DynamicImage, ImageError};
 use std::fs::File;
-use std::io::Cursor;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Cursor, Read};
 
 pub struct Nef {
 	buffer: Vec<u8>,
@@ -51,7 +49,7 @@ impl ThumbnailImage for Nef {
 		Nef { buffer }
 	}
 
-	fn get_thumbnail(&self) -> RawResult<DynamicImage> {
+	fn get_thumbnail(&self) -> Result<Option<DynamicImage>, ImageError> {
 		let header = self.parse_header();
 		let offset = header.ifd_offset as usize;
 
@@ -69,12 +67,14 @@ impl ThumbnailImage for Nef {
 				let thumb = thumbnail.unwrap();
 				let image_data = &self.buffer[thumb.offset..thumb.offset + thumb.length];
 
-				return Ok(ImageReader::new(Cursor::new(image_data))
-					.with_guessed_format()?
-					.decode()?);
+				return Ok(Some(
+					ImageReader::new(Cursor::new(image_data))
+						.with_guessed_format()?
+						.decode()?,
+				));
 			}
 		}
 
-		Err(RawError::ExtractThumbnail)
+		Ok(None)
 	}
 }
