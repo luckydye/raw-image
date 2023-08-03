@@ -1,6 +1,6 @@
 [package]
 name = "raw-image"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Tim Havlicek <tim.h4vlicek@gmail.com>"]
 description = "A Rust create for extracting data like thumbnails out of RAW photo files."
 repository = "https://github.com/luckydye/raw-image/"
