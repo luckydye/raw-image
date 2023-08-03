@@ -128,6 +128,8 @@ pub enum Tags {
 	// TileByteCounts = 325,
 	ThumbnailOffset = 513,
 	ThumbnailLength = 514,
+
+	SubIDF = 330,
 }
 
 #[derive(Debug)]

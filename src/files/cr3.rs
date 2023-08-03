@@ -1,11 +1,10 @@
 use super::{RawError, RawResult, ThumbnailImage};
 
+use image::io::Reader as ImageReader;
 use std::{
 	fs::File,
 	io::{BufReader, Cursor, Read},
 };
-
-use image::io::Reader as ImageReader;
 
 //
 // Reference: https://github.com/lclevy/canon_cr3
@@ -21,7 +20,6 @@ struct Cr3Box {
 }
 
 const UUID_PRVW: &str = "eaf42b5e1c984b88b9fbb7dc406e4d16";
-const UUID_MOOV: &str = "85c0b68782f11e08111f4ce462b6a48";
 
 impl Cr3 {
 	fn parse_box(&self, offset: usize) -> Cr3Box {
@@ -36,7 +34,7 @@ impl Cr3 {
 		}
 	}
 
-	fn prase_box_uuid(&self, offset: usize) -> String {
+	fn prase_uuid(&self, offset: usize) -> String {
 		let buffer = &self.buffer;
 
 		let mut uuid = String::new();
@@ -49,31 +47,8 @@ impl Cr3 {
 			uuid_offset += 1;
 			uuid += &String::from(hex);
 		}
-		// offset += 16;
 
 		return uuid;
-	}
-
-	fn parse_box_preview(&self, offset: usize) -> RawResult<image::DynamicImage> {
-		let buffer = &self.buffer;
-
-		let mut offset = offset + 11 + 1 + 4 + 2 + 2 + 2;
-
-		// let width = u16::from_be_bytes(buffer[offset..offset+2].try_into().unwrap());
-		// let height = u16::from_be_bytes(buffer[offset+2..offset+4].try_into().unwrap());
-		offset += 4;
-		offset += 2;
-
-		let byte_size = u32::from_be_bytes(buffer[offset..offset + 4].try_into().unwrap());
-		offset += 4;
-
-		let image_data = &buffer[offset..offset + usize::try_from(byte_size).unwrap()];
-
-		let img = ImageReader::new(Cursor::new(image_data))
-			.with_guessed_format()?
-			.decode()?;
-
-		Ok(img)
 	}
 }
 
@@ -90,21 +65,33 @@ impl ThumbnailImage for Cr3 {
 	fn get_thumbnail(&self) -> RawResult<image::DynamicImage> {
 		let mut offset: usize = 0;
 
-		for _ in 0..4 {
-			let mut index = offset;
-			let cr3_box = self.parse_box(index);
-			index += 8;
+		for _ in 0..6 {
+			if offset >= self.buffer.len() && offset > 0 {
+				break;
+			}
+
+			let mut sub_offset = offset;
+			let cr3_box = self.parse_box(sub_offset);
+			sub_offset += 8;
 
 			if cr3_box.box_type == "uuid" {
-				let uuid = self.prase_box_uuid(index);
-				index += 16;
-
-				if uuid == UUID_MOOV {
-					// skip
-				}
+				let uuid = self.prase_uuid(sub_offset);
 
 				if uuid == UUID_PRVW {
-					return Ok(self.parse_box_preview(index)?);
+					let mut offset = offset + 11 + 1 + 4 + 2 + 2 + 2 + 4 + 2;
+					let byte_size =
+						u32::from_be_bytes(self.buffer[offset..offset + 4].try_into().unwrap());
+					offset += 4;
+
+					let image_data =
+						&self.buffer[offset..offset + usize::try_from(byte_size).unwrap()];
+
+					let img = ImageReader::new(Cursor::new(image_data))
+						.with_guessed_format()?
+						.decode()?;
+
+					// small pp
+					return Ok(img);
 				}
 			}
 

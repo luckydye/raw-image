@@ -1,4 +1,4 @@
-use super::tiff::{self, Tags};
+use super::tiff::{self};
 use super::{RawError, RawResult, ThumbnailImage};
 
 use image::io::Reader as ImageReader;

@@ -7,6 +7,7 @@ pub trait ThumbnailImage {
 mod arw;
 mod cr2;
 mod cr3;
+mod nef;
 mod tiff;
 
 use std::{fs, fs::File, path::Path};
@@ -53,8 +54,7 @@ pub fn raw_to_dynamic_image(path: &Path) -> RawResult<DynamicImage> {
 			Some("cr3") => cr3::Cr3::new(file).get_thumbnail().unwrap(),
 			Some("cr2") => cr2::Cr2::new(file).get_thumbnail().unwrap(),
 			Some("arw") => arw::Arw::new(file).get_thumbnail().unwrap(),
-			// Some("nef") => any::Any::new(file).get_thumbnail().unwrap(),
-			// Some("dng") => any::Any::new(file).get_thumbnail().unwrap(),
+			Some("nef") => nef::Nef::new(file).get_thumbnail().unwrap(),
 			_ => return Err(RawError::Unsupported),
 		}
 	};
