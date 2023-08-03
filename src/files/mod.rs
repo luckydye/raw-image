@@ -4,6 +4,7 @@ pub trait ThumbnailImage {
 	fn get_thumbnail(&self) -> RawResult<image::DynamicImage>;
 }
 
+mod arw;
 mod cr2;
 mod cr3;
 mod tiff;
@@ -51,10 +52,9 @@ pub fn raw_to_dynamic_image(path: &Path) -> RawResult<DynamicImage> {
 		match ext.to_ascii_lowercase().to_str() {
 			Some("cr3") => cr3::Cr3::new(file).get_thumbnail().unwrap(),
 			Some("cr2") => cr2::Cr2::new(file).get_thumbnail().unwrap(),
-			// Some("arw") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
-			// Some("nef") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
-			// Some("rw2") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
-			// Some("dng") => any::Any::new(file).get_thumbnail_array(0).unwrap(),
+			Some("arw") => arw::Arw::new(file).get_thumbnail().unwrap(),
+			// Some("nef") => any::Any::new(file).get_thumbnail().unwrap(),
+			// Some("dng") => any::Any::new(file).get_thumbnail().unwrap(),
 			_ => return Err(RawError::Unsupported),
 		}
 	};

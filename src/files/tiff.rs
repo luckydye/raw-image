@@ -2,7 +2,132 @@
 pub struct IFD {
 	pub tags: Vec<Tag>,
 	pub next: usize,
-	// implement ifd methods here
+}
+
+#[derive(Debug)]
+pub struct Strip {
+	pub offset: usize,
+	pub length: usize,
+	pub compression: u16,
+}
+
+pub struct Thumbnail {
+	pub offset: usize,
+	pub length: usize,
+}
+
+impl IFD {
+	pub fn get_tag(&self, tag: u16) -> Option<&Tag> {
+		self.tags.iter().find(|t| t.tag == tag)
+	}
+
+	pub fn get_thumbnail(&self) -> Option<Thumbnail> {
+		let offset_tag = self.get_tag(Tags::ThumbnailOffset as u16);
+		let length_tag = self.get_tag(Tags::ThumbnailLength as u16);
+
+		if offset_tag.is_some() && length_tag.is_some() {
+			let offset = u32::from_le_bytes(offset_tag.unwrap().value[0..4].try_into().unwrap());
+			let length = u32::from_le_bytes(length_tag.unwrap().value[0..4].try_into().unwrap());
+
+			return Some(Thumbnail {
+				offset: offset as usize,
+				length: length as usize,
+			});
+		}
+
+		return None;
+	}
+
+	pub fn get_strips(&self) -> Vec<Strip> {
+		let mut strips = Vec::new();
+
+		let compression_tag = self.get_tag(Tags::Compression as u16);
+		let mut compression = 0;
+		if compression_tag.is_some() {
+			compression =
+				u16::from_le_bytes(compression_tag.unwrap().value[0..2].try_into().unwrap());
+		}
+
+		let offsets = self
+			.tags
+			.iter()
+			.find(|tag| tag.tag == Tags::StripOffsets as u16);
+
+		let lengths = self
+			.tags
+			.iter()
+			.find(|tag| tag.tag == Tags::StripByteCounts as u16);
+
+		if lengths.is_some() && offsets.is_some() {
+			for i in 0..lengths.unwrap().count {
+				let offset = u32::from_le_bytes(
+					offsets.unwrap().value[i as usize * 4..i as usize * 4 + 4]
+						.try_into()
+						.unwrap(),
+				);
+				let length = u32::from_le_bytes(
+					lengths.unwrap().value[i as usize * 4..i as usize * 4 + 4]
+						.try_into()
+						.unwrap(),
+				);
+
+				strips.push(Strip {
+					offset: offset as usize,
+					length: length as usize,
+					compression,
+				});
+			}
+		}
+
+		return strips;
+	}
+}
+
+// pub enum Subfile {
+// 	FullResolutionImage = 1,
+// 	ReducedResolutionImage = 2,
+// 	SinglePageOfMultiPageImage = 3,
+// }
+
+// pub enum Compression {
+// 	Uncompressed = 1,
+// 	CCITT1D = 2,
+// 	CCITTGroup3 = 3,
+// 	CCITTGroup4 = 4,
+// 	LZW = 5,
+// 	JPEGOldStyle = 6,
+// 	JPEG = 7,
+// 	Deflate = 8,
+// 	JBIGBAndW = 9,
+// 	JBIGColor = 10,
+// 	JPEG2000 = 11,
+// }
+
+pub enum Tags {
+	// NewSubfileType = 254,
+	// SubfileType = 255,
+	// ImageWidth = 256,
+	// ImageLength = 257,
+	// BitsPerSample = 258,
+	Compression = 259,
+
+	// PhotometricInterpretation = 262,
+	StripOffsets = 273,
+	// Orientation = 274,
+
+	// SamplesPerPixel = 277,
+	// RowsPerStrip = 278,
+	StripByteCounts = 279,
+
+	// XResolution = 282,
+	// YResolution = 283,
+
+	// TileWidth = 322,
+	// TileLength = 323,
+	// TileOffsets = 324,
+	// TileByteCounts = 325,
+	ThumbnailOffset = 513,
+	ThumbnailLength = 514,
 }
 
 #[derive(Debug)]
@@ -20,41 +145,9 @@ pub struct Fileheader {
 	pub ifd_offset: u16,
 }
 
-pub struct Tiff {
-	buffer: Vec<u8>,
-}
+pub struct Tiff {}
 
 impl Tiff {
-	pub fn parse_tag_name(tag: u16) -> &'static str {
-		match tag {
-			254 => "NewSubfileType",
-			255 => "SubfileType",
-			256 => "ImageWidth",
-			257 => "ImageLength",
-			258 => "BitsPerSample",
-			259 => "Compression",
-
-			262 => "PhotometricInterpretation",
-
-			273 => "StripOffsets",
-			274 => "Orientation",
-
-			277 => "SamplesPerPixel",
-			278 => "RowsPerStrip",
-			279 => "StripByteCounts",
-
-			282 => "XResolution",
-			283 => "YResolution",
-
-			322 => "TileWidth",
-			323 => "TileLength",
-			324 => "TileOffsets",
-			325 => "TileByteCounts",
-
-			_ => "Unknown",
-		}
-	}
-
 	pub fn parse_tag(buffer: &Vec<u8>, offset: usize) -> Tag {
 		let tag = u16::from_le_bytes(buffer[offset..offset + 2].try_into().unwrap());
 		let entry_type = u16::from_le_bytes(buffer[offset + 2..offset + 4].try_into().unwrap());
@@ -77,6 +170,7 @@ impl Tiff {
 		};
 
 		if count * tag_type_size <= 4 {
+			// its possible for the value to be stored inside the offset field
 			value_offset = (offset + 8) as u32;
 		}
 
@@ -92,6 +186,13 @@ impl Tiff {
 
 	pub fn parse_ifd(buffer: &Vec<u8>, offset: usize) -> IFD {
 		let count = u16::from_le_bytes(buffer[offset..offset + 2].try_into().unwrap());
+
+		let mut tags = Vec::new();
+
+		for i in 0..count {
+			tags.push(Tiff::parse_tag(&buffer, offset + 2 + (i as usize * 12)));
+		}
+
 		let size = usize::from(count) * 12;
 		let next_offset_int = offset + 2 + size;
 		let next_offset = u32::from_le_bytes(
@@ -99,12 +200,6 @@ impl Tiff {
 				.try_into()
 				.unwrap(),
 		);
-
-		let mut tags = Vec::new();
-
-		for i in 0..count {
-			tags.push(Tiff::parse_tag(&buffer, offset + 2 + (i as usize * 12)));
-		}
 
 		IFD {
 			tags: tags,
@@ -122,50 +217,3 @@ impl Tiff {
 		}
 	}
 }
-
-// impl ThumbnailImage for Tiff {
-// 	fn new(file: File) -> Tiff {
-// 		let mut reader = BufReader::new(file);
-// 		let mut buffer = Vec::new();
-
-// 		reader.read_to_end(&mut buffer).unwrap();
-
-// 		Tiff { buffer: buffer }
-// 	}
-
-// 	fn get_thumbnail(&self) -> RawResult<DynamicImage> {
-// 		let header = self.parse_header();
-// 		let mut offset: usize = usize::from(header.ifd_offset).try_into().unwrap();
-
-// 		for _ in 0..3 {
-// 			let ifd = self.parse_ifd(offset);
-
-// 			println!("ifd: {:?} tags: {:?}", offset, ifd.tags.len());
-
-// 			// for tag in &ifd.tags {
-// 			// 	if tag.name == "Orientation" {
-// 			// 		println!("tag: {:?}", tag);
-// 			// 	}
-// 			// 	if tag.name == "ImageWidth" {
-// 			// 		println!("tag: {:?}", tag);
-// 			// 	}
-// 			// 	if tag.name == "StripOffsets" {
-// 			// 		println!("tag: {:?}", tag);
-// 			// 	}
-// 			// 	if tag.name == "TileOffsets" {
-// 			// 		println!("tag: {:?}", tag);
-// 			// 	}
-// 			// 	if tag.name == "NewSubfileType" {
-// 			// 		println!("tag: {:?}", tag);
-// 			// 	}
-// 			// 	if tag.name == "Compression" {
-// 			// 		println!("tag: {:?}", tag);
-// 			// 	}
-// 			// }
-
-// 			offset = ifd.next;
-// 		}
-
-// 		Err(RawError::ExtractThumbnail)
-// 	}
-// }

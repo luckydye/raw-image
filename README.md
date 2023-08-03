@@ -6,10 +6,10 @@ A Rust create for extracting data like thumbnails out of RAW photo files.
 
 ### Supported:
 - cr3
-
-### Todos:
 - cr2
 - arw
+
+### Todos:
 - dng
 - nef
 - tiff
