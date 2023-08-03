@@ -8,8 +8,4 @@ A Rust create for extracting data like thumbnails out of RAW photo files.
 - cr3
 - cr2
 - arw
-
-### Todos:
-- dng
 - nef
-- tiff
